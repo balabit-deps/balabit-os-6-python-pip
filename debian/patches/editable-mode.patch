@@ -1,0 +1,160 @@
+--- a/pip/req/req_install.py
++++ b/pip/req/req_install.py
+@@ -17,7 +17,9 @@
+ from pip._vendor import pkg_resources, six
+ from pip._vendor.distlib.markers import interpret as markers_interpret
+ from pip._vendor.packaging import specifiers
++from pip._vendor.packaging.requirements import InvalidRequirement, Requirement
+ from pip._vendor.packaging.utils import canonicalize_name
++from pip._vendor.packaging.version import Version
+ from pip._vendor.six.moves import configparser
+ 
+ import pip.wheel
+@@ -45,7 +47,6 @@
+ from pip.req.req_uninstall import UninstallPathSet
+ from pip.vcs import vcs
+ from pip.wheel import move_wheel_files, Wheel
+-from pip._vendor.packaging.version import Version
+ 
+ 
+ logger = logging.getLogger(__name__)
+@@ -74,8 +75,8 @@
+         self.extras = ()
+         if isinstance(req, six.string_types):
+             try:
+-                req = pkg_resources.Requirement.parse(req)
+-            except pkg_resources.RequirementParseError:
++                req = Requirement(req)
++            except InvalidRequirement:
+                 if os.path.sep in req:
+                     add_msg = "It looks like a path. Does it exist ?"
+                 elif '=' in req and not any(op in req for op in operators):
+@@ -230,8 +231,7 @@
+                   wheel_cache=wheel_cache, constraint=constraint)
+ 
+         if extras:
+-            res.extras = pkg_resources.Requirement.parse('__placeholder__' +
+-                                                         extras).extras
++            res.extras = Requirement('placeholder' + extras).extras
+ 
+         return res
+ 
+@@ -362,7 +362,7 @@
+     def name(self):
+         if self.req is None:
+             return None
+-        return native_str(self.req.project_name)
++        return native_str(pkg_resources.safe_name(self.req.name))
+ 
+     @property
+     def setup_py_dir(self):
+@@ -436,23 +436,24 @@
+                 op = "=="
+             else:
+                 op = "==="
+-            self.req = pkg_resources.Requirement.parse(
++            self.req = Requirement(
+                 "".join([
+                     self.pkg_info()["Name"],
+                     op,
+                     self.pkg_info()["Version"],
+-                ]))
++                ])
++            )
+             self._correct_build_location()
+         else:
+             metadata_name = canonicalize_name(self.pkg_info()["Name"])
+-            if canonicalize_name(self.req.project_name) != metadata_name:
++            if canonicalize_name(self.req.name) != metadata_name:
+                 logger.warning(
+                     'Running setup.py (path:%s) egg_info for package %s '
+                     'produced metadata for project name %s. Fix your '
+                     '#egg=%s fragments.',
+                     self.setup_py, self.name, metadata_name, self.name
+                 )
+-                self.req = pkg_resources.Requirement.parse(metadata_name)
++                self.req = Requirement(metadata_name)
+ 
+     def egg_info_data(self, filename):
+         if self.satisfied_by is not None:
+@@ -540,7 +541,7 @@
+     def assert_source_matches_version(self):
+         assert self.source_dir
+         version = self.pkg_info()['version']
+-        if version not in self.req:
++        if self.req.specifier and version not in self.req.specifier:
+             logger.warning(
+                 'Requested %s, but installing version %s',
+                 self,
+@@ -818,7 +819,8 @@
+ 
+     def match_markers(self):
+         if self.markers is not None:
+-            return markers_interpret(self.markers)
++            from packaging.markers import Marker
++            return Marker(self.markers).evaluate()
+         else:
+             return True
+ 
+@@ -994,7 +996,14 @@
+         if self.req is None:
+             return False
+         try:
+-            self.satisfied_by = pkg_resources.get_distribution(self.req)
++            # get_distribution() will resolve the entire list of requirements
++            # anyway, and we've already determined that we need the requirement
++            # in question, so strip the marker so that we don't try to
++            # evaluate it.
++            from packaging.requirements import Requirement
++            no_marker = Requirement(str(self.req))
++            no_marker.marker = None
++            self.satisfied_by = pkg_resources.get_distribution(str(no_marker))
+         except pkg_resources.DistributionNotFound:
+             return False
+         except pkg_resources.VersionConflict:
+@@ -1142,9 +1151,7 @@
+             return (
+                 package_name,
+                 url_no_extras,
+-                pkg_resources.Requirement.parse(
+-                    '__placeholder__' + extras
+-                ).extras,
++                Requirement("placeholder" + extras).extras,
+             )
+         else:
+             return package_name, url_no_extras, None
+--- a/pip/index.py
++++ b/pip/index.py
+@@ -335,7 +335,9 @@
+         """
+ 
+         def mkurl_pypi_url(url):
+-            loc = posixpath.join(url, urllib_parse.quote(project_name.lower()))
++            loc = posixpath.join(
++                url,
++                urllib_parse.quote(canonicalize_name(project_name)))
+             # For maximum compatibility with easy_install, ensure the path
+             # ends in a trailing slash.  Although this isn't in the spec
+             # (and PyPI can handle it without the slash) some other index
+--- a/pip/req/req_set.py
++++ b/pip/req/req_set.py
+@@ -243,7 +243,7 @@
+             if (parent_req_name is None and existing_req and not
+                     existing_req.constraint and
+                     existing_req.extras == install_req.extras and not
+-                    existing_req.req.specs == install_req.req.specs):
++                    existing_req.req.specifier == install_req.req.specifier):
+                 raise InstallationError(
+                     'Double requirement given: %s (already in %s, name=%r)'
+                     % (install_req, existing_req, name))
+--- a/pip/wheel.py
++++ b/pip/wheel.py
+@@ -300,7 +300,7 @@
+                         s.endswith('.dist-info') and
+                         # is self.req.project_name case preserving?
+                         s.lower().startswith(
+-                            req.project_name.replace('-', '_').lower())):
++                            req.name.replace('-', '_').lower())):
+                     assert not info_dir, 'Multiple .dist-info directories'
+                     info_dir.append(destsubdir)
+             for f in files:

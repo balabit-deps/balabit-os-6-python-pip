@@ -1,0 +1,11 @@
+# see git-dpm(1) from git-dpm package
+6b0f8037cf4494fd026067414dd79e617e890bba
+6b0f8037cf4494fd026067414dd79e617e890bba
+cb678960292d0979061d7c0f180510fa688a6528
+cb678960292d0979061d7c0f180510fa688a6528
+python-pip_8.1.1.orig.tar.gz
+6c6076664a51ac14849696df65ace8d44e42dea7
+1139175
+debianTag="debian/%e%v"
+patchedTag="patched/%e%v"
+upstreamTag="upstream/%e%u"

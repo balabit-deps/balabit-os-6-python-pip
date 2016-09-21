@@ -1,0 +1,7 @@
+editable-mode.patch
+hands-off-system-packages.patch
+debundle.patch
+handle-unbundled-requests.patch
+set_user_default.patch
+skip-bad-requirements.patch
+lp1626258-do-not-use-project_name.patch

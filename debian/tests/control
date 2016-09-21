@@ -1,0 +1,15 @@
+Tests: pip2-root.sh
+Restrictions: needs-root,needs-recommends
+
+Tests: pip3-root.sh
+Restrictions: needs-root,needs-recommends
+
+Tests: pip2-user.sh
+Restrictions: needs-recommends
+
+Tests: pip3-user.sh
+Restrictions: needs-recommends
+
+# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=823358
+Tests: pip3-editable.sh
+Restrictions: needs-recommends

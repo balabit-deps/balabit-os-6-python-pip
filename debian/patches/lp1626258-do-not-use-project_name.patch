@@ -1,0 +1,22 @@
+Description: Use Requirement.name instead of Requirement.project_name
+ pip._vendor.packaging.requirements.Requirement renamed the property project_name
+ to name, this patch fixes the last known place where project_name is still being
+ accessed.
+ .
+ This patch is a single change, unlike the related upstream change, because
+ d/p/editable-mode.patch already included the rest of it.
+Author: Donald Stufft <donald@stufft.io>
+Origin: https://github.com/pypa/pip/commit/8e236dd6a09bd2f70f9d4fc886da8c354d4c58f2
+Applied-Upstream: 8.1.2
+---
+--- a/pip/req/req_install.py
++++ b/pip/req/req_install.py
+@@ -1008,7 +1008,7 @@
+             return False
+         except pkg_resources.VersionConflict:
+             existing_dist = pkg_resources.get_distribution(
+-                self.req.project_name
++                self.req.name
+             )
+             if self.use_user_site:
+                 if dist_in_usersite(existing_dist):
